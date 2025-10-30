@@ -39,7 +39,7 @@ const Index = () => {
     xray: false,
   });
 
-  const [position, setPosition] = useState<Position>({ x: 0, y: 1.8, z: 0 });
+  const [position, setPosition] = useState<Position>({ x: 0, y: 0, z: 0 });
   const [rotation, setRotation] = useState<Rotation>({ yaw: 0, pitch: 0 });
   const [velocity, setVelocity] = useState({ x: 0, y: 0, z: 0 });
   const [isRunning, setIsRunning] = useState(false);
@@ -138,7 +138,7 @@ const Index = () => {
       } else {
         setVelocity((v) => {
           let newY = v.y - 0.008;
-          if (position.y <= 1.8 && newY < 0) {
+          if (position.y <= 0 && newY < 0) {
             newY = 0;
             setIsJumping(false);
           }
@@ -149,7 +149,7 @@ const Index = () => {
 
       setPosition((prev) => ({
         x: prev.x + dx,
-        y: Math.max(1.8, prev.y + dy),
+        y: Math.max(0, prev.y + dy),
         z: prev.z + dz,
       }));
 
@@ -182,33 +182,52 @@ const Index = () => {
     ctx.fillStyle = '#8B7355';
     ctx.fillRect(0, height / 2, width, height / 2);
 
-    const blockSize = 40;
-    const gridSize = 20;
+    const blockSize = 60;
+    const gridSize = 30;
+    const eyeHeight = 1.62;
 
     for (let x = -gridSize; x < gridSize; x++) {
       for (let z = -gridSize; z < gridSize; z++) {
-        const worldX = x - position.x / 2;
-        const worldZ = z - position.z / 2;
+        const worldX = x - position.x;
+        const worldZ = z - position.z;
 
-        const screenX = width / 2 + (worldX * Math.cos(rotation.yaw) - worldZ * Math.sin(rotation.yaw)) * blockSize;
-        const screenY = height / 2 + worldZ * Math.cos(rotation.yaw) * blockSize * 0.5 - position.y * 10;
+        const distance = Math.sqrt(worldX * worldX + worldZ * worldZ);
+        if (distance > 15) continue;
 
-        if (screenY > height / 2 - 20 && screenY < height) {
-          const distance = Math.sqrt(worldX * worldX + worldZ * worldZ);
-          const brightness = Math.max(50, 150 - distance * 5);
+        const rotatedX = worldX * Math.cos(rotation.yaw) + worldZ * Math.sin(rotation.yaw);
+        const rotatedZ = -worldX * Math.sin(rotation.yaw) + worldZ * Math.cos(rotation.yaw);
 
-          ctx.fillStyle = `rgb(${brightness * 0.5}, ${brightness * 0.7}, ${brightness * 0.5})`;
-          ctx.fillRect(screenX, screenY, blockSize * 0.9, blockSize * 0.9);
+        if (rotatedZ <= 0.1) continue;
 
-          ctx.strokeStyle = `rgb(${brightness * 0.3}, ${brightness * 0.5}, ${brightness * 0.3})`;
-          ctx.lineWidth = 2;
-          ctx.strokeRect(screenX, screenY, blockSize * 0.9, blockSize * 0.9);
+        const screenX = width / 2 + (rotatedX / rotatedZ) * width * 0.8;
+        const blockWorldY = 0 - (position.y + eyeHeight);
+        const screenY = height / 2 - (blockWorldY / rotatedZ) * height * 0.8 + (rotation.pitch * height * 0.3);
 
-          if (cheats.xray) {
-            if ((x + z) % 3 === 0) {
-              ctx.fillStyle = 'rgba(64, 224, 208, 0.6)';
-              ctx.fillRect(screenX + blockSize * 0.3, screenY + blockSize * 0.3, blockSize * 0.3, blockSize * 0.3);
-            }
+        const blockScreenSize = blockSize / rotatedZ;
+
+        if (screenX > -blockScreenSize && screenX < width + blockScreenSize && 
+            screenY > -blockScreenSize && screenY < height + blockScreenSize) {
+          
+          const fog = Math.max(0, Math.min(1, 1 - distance / 15));
+          const brightness = 180 * fog;
+          
+          const grassTop = `rgb(${brightness * 0.4}, ${brightness * 0.7}, ${brightness * 0.3})`;
+          const grassSide = `rgb(${brightness * 0.35}, ${brightness * 0.5}, ${brightness * 0.25})`;
+          
+          ctx.fillStyle = grassTop;
+          ctx.fillRect(screenX, screenY, blockScreenSize, blockScreenSize);
+
+          ctx.fillStyle = grassSide;
+          ctx.fillRect(screenX, screenY + blockScreenSize * 0.1, blockScreenSize, blockScreenSize * 0.3);
+
+          ctx.strokeStyle = `rgba(0, 0, 0, ${0.3 * fog})`;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(screenX, screenY, blockScreenSize, blockScreenSize);
+
+          if (cheats.xray && (x + z) % 3 === 0) {
+            ctx.fillStyle = `rgba(64, 224, 208, ${0.7 * fog})`;
+            ctx.fillRect(screenX + blockScreenSize * 0.25, screenY + blockScreenSize * 0.25, 
+                        blockScreenSize * 0.5, blockScreenSize * 0.5);
           }
         }
       }
