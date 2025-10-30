@@ -47,6 +47,12 @@ interface Inventory {
   [key: string]: number;
 }
 
+interface ChatMessage {
+  author: string;
+  text: string;
+  timestamp: number;
+}
+
 const Index = () => {
   const [gameState, setGameState] = useState<GameState>('menu');
   const [selectedServer, setSelectedServer] = useState<string>('');
@@ -73,6 +79,9 @@ const Index = () => {
   const [inventory, setInventory] = useState<Inventory>({});
   const [nearChest, setNearChest] = useState<Chest | null>(null);
   const [showInventory, setShowInventory] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [joystickActive, setJoystickActive] = useState(false);
   const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
   const [lookJoystickActive, setLookJoystickActive] = useState(false);
@@ -93,6 +102,18 @@ const Index = () => {
   ];
 
   const botNames = ['Steve', 'Alex', 'Herobrine', 'Notch', 'Player123', 'ProGamer', 'Miner42'];
+  const botPhrases = [
+    'Привет всем!',
+    'Кто-нибудь хочет в шахту?',
+    'Только что нашел алмазы!',
+    'Gg wp',
+    'Лагает немного...',
+    'Кто тут?',
+    'Красиво построено',
+    'Пойду фармить',
+    'Кто хочет в пвп?',
+    'ez',
+  ];
 
   useEffect(() => {
     if (gameState === 'playing' && bots.length === 0) {
@@ -152,21 +173,70 @@ const Index = () => {
   }, [gameState]);
 
   useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    const chatInterval = setInterval(() => {
+      if (bots.length > 0 && Math.random() < 0.3) {
+        const randomBot = bots[Math.floor(Math.random() * bots.length)];
+        const randomPhrase = botPhrases[Math.floor(Math.random() * botPhrases.length)];
+        setChatMessages(prev => [
+          ...prev.slice(-9),
+          { author: randomBot.name, text: randomPhrase, timestamp: Date.now() }
+        ]);
+      }
+    }, 8000);
+
+    return () => clearInterval(chatInterval);
+  }, [gameState, bots]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (gameState !== 'playing') return;
 
       const keyMap: {[key: string]: string} = {
-        'ц': 'w', 'ы': 's', 'ф': 'a', 'в': 'd'
+        'ц': 'w', 'ы': 's', 'ф': 'a', 'в': 'd', 'й': 'q', 'е': 't'
       };
       const key = keyMap[e.key.toLowerCase()] || e.key.toLowerCase();
 
-      if (key === 'e' && nearChest) {
+      if ((key === 'q' || key === 'й') && !chatOpen) {
+        e.preventDefault();
+        setCheatMenuOpen(prev => !prev);
+        return;
+      }
+
+      if ((key === 't' || key === 'е') && !showInventory) {
+        e.preventDefault();
+        setChatOpen(true);
+        return;
+      }
+
+      if (key === 'enter' && chatOpen) {
+        e.preventDefault();
+        if (chatInput.trim()) {
+          setChatMessages(prev => [
+            ...prev.slice(-9),
+            { author: 'Ты', text: chatInput, timestamp: Date.now() }
+          ]);
+          setChatInput('');
+        }
+        setChatOpen(false);
+        return;
+      }
+
+      if (key === 'escape' && chatOpen) {
+        e.preventDefault();
+        setChatOpen(false);
+        setChatInput('');
+        return;
+      }
+
+      if (key === 'e' && nearChest && !chatOpen) {
         e.preventDefault();
         setShowInventory(!showInventory);
         return;
       }
 
-      if (!cheatMenuOpen) {
+      if (!cheatMenuOpen && !chatOpen) {
         keysPressed.current.add(key);
 
         if (e.key === 'Shift') {
@@ -185,7 +255,7 @@ const Index = () => {
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const keyMap: {[key: string]: string} = {
-        'ц': 'w', 'ы': 's', 'ф': 'a', 'в': 'd'
+        'ц': 'w', 'ы': 's', 'ф': 'a', 'в': 'd', 'й': 'q', 'е': 't'
       };
       const key = keyMap[e.key.toLowerCase()] || e.key.toLowerCase();
       keysPressed.current.delete(key);
@@ -532,7 +602,7 @@ const Index = () => {
           </Card>
 
           <div className="text-center space-y-2">
-            <p className="text-gray-500 text-sm">Управление: WASD - движение | Shift - бег | Space - прыжок | Вкладка SLIDE - читы</p>
+            <p className="text-gray-500 text-sm">Управление: WASD - движение | Shift - бег | Space - прыжок | Q - читы | T - чат</p>
             <p className="text-gray-600 text-xs">Made with ❤️ by SlideClient Team</p>
           </div>
         </div>
@@ -742,12 +812,45 @@ const Index = () => {
         </div>
       )}
 
+      <div className="absolute bottom-24 left-4 w-96 max-h-64 overflow-y-auto pointer-events-none">
+        <div className="space-y-1">
+          {chatMessages.map((msg, idx) => (
+            <div
+              key={idx}
+              className="bg-black/60 backdrop-blur-sm px-3 py-1 rounded text-sm"
+            >
+              <span className="text-gray-300 font-bold">{msg.author}: </span>
+              <span className="text-white">{msg.text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {chatOpen && (
+        <div className="absolute bottom-4 left-4 w-96 animate-fade-in">
+          <Card className="bg-black/90 backdrop-blur-md p-4 border-blue-500">
+            <div className="space-y-2">
+              <h3 className="text-white font-bold">Чат (ESC - закрыть, Enter - отправить)</h3>
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                autoFocus
+                placeholder="Введи сообщение..."
+                className="w-full px-3 py-2 bg-black/60 text-white border border-gray-600 rounded focus:border-blue-500 outline-none"
+                maxLength={100}
+              />
+            </div>
+          </Card>
+        </div>
+      )}
+
       {cheatMenuOpen && (
         <div className="absolute top-20 left-4 w-80 animate-scale-in">
           <Card className="bg-black/90 border-[#ea384c] backdrop-blur-md p-6">
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-gray-700 pb-3">
-                <h3 className="text-2xl font-bold text-[#ea384c]">CHEAT MENU</h3>
+                <h3 className="text-2xl font-bold text-[#ea384c]">CHEAT MENU (Q для закрытия)</h3>
                 <Button
                   variant="ghost"
                   size="sm"
