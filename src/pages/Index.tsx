@@ -37,6 +37,16 @@ interface Bot {
   name: string;
 }
 
+interface Chest {
+  x: number;
+  z: number;
+  items: string[];
+}
+
+interface Inventory {
+  [key: string]: number;
+}
+
 const Index = () => {
   const [gameState, setGameState] = useState<GameState>('menu');
   const [selectedServer, setSelectedServer] = useState<string>('');
@@ -56,6 +66,13 @@ const Index = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
   const [bots, setBots] = useState<Bot[]>([]);
+  const [chests] = useState<Chest[]>([
+    { x: 5, z: 5, items: ['Алмазы', 'Железо', 'Золото', 'Еда'] },
+    { x: -8, z: 3, items: ['Дерево', 'Камень', 'Уголь'] },
+  ]);
+  const [inventory, setInventory] = useState<Inventory>({});
+  const [nearChest, setNearChest] = useState<Chest | null>(null);
+  const [showInventory, setShowInventory] = useState(false);
   const [joystickActive, setJoystickActive] = useState(false);
   const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
   const [lookJoystickActive, setLookJoystickActive] = useState(false);
@@ -86,7 +103,7 @@ const Index = () => {
         initialBots.push({
           id: i,
           x,
-          y: 1.62,
+          y: 1.3,
           z,
           yaw: Math.random() * Math.PI * 2,
           targetX: x,
@@ -138,10 +155,19 @@ const Index = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (gameState !== 'playing') return;
 
+      const keyMap: {[key: string]: string} = {
+        'ц': 'w', 'ы': 's', 'ф': 'a', 'в': 'd'
+      };
+      const key = keyMap[e.key.toLowerCase()] || e.key.toLowerCase();
 
+      if (key === 'e' && nearChest) {
+        e.preventDefault();
+        setShowInventory(!showInventory);
+        return;
+      }
 
       if (!cheatMenuOpen) {
-        keysPressed.current.add(e.key.toLowerCase());
+        keysPressed.current.add(key);
 
         if (e.key === 'Shift') {
           setIsRunning(true);
@@ -158,7 +184,11 @@ const Index = () => {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      keysPressed.current.delete(e.key.toLowerCase());
+      const keyMap: {[key: string]: string} = {
+        'ц': 'w', 'ы': 's', 'ф': 'a', 'в': 'd'
+      };
+      const key = keyMap[e.key.toLowerCase()] || e.key.toLowerCase();
+      keysPressed.current.delete(key);
       if (e.key === 'Shift') {
         setIsRunning(false);
       }
@@ -230,8 +260,20 @@ const Index = () => {
         moveZ /= moveLength;
       }
 
-      dx = (moveX * Math.cos(rotation.yaw) - moveZ * Math.sin(rotation.yaw)) * speed * speedMultiplier;
-      dz = (moveX * Math.sin(rotation.yaw) + moveZ * Math.cos(rotation.yaw)) * speed * speedMultiplier;
+      dx = (-moveZ * Math.sin(rotation.yaw) + moveX * Math.cos(rotation.yaw)) * speed * speedMultiplier;
+      dz = (-moveZ * Math.cos(rotation.yaw) - moveX * Math.sin(rotation.yaw)) * speed * speedMultiplier;
+
+      const distToChest = chests.map(chest => ({
+        chest,
+        dist: Math.sqrt((chest.x - position.x) ** 2 + (chest.z - position.z) ** 2)
+      })).sort((a, b) => a.dist - b.dist)[0];
+      
+      if (distToChest && distToChest.dist < 2) {
+        setNearChest(distToChest.chest);
+      } else {
+        setNearChest(null);
+        setShowInventory(false);
+      }
 
       if (lookJoystickActive) {
         setRotation((prev) => ({
@@ -361,8 +403,8 @@ const Index = () => {
 
       const scale = (width / 2) / Math.tan(fov / 2) / relZ;
       const screenX = width / 2 + relX * scale;
-      const botHeight = 1.8;
-      const botWidth = 0.6;
+      const botHeight = 1.3;
+      const botWidth = 0.4;
       const botBottom = height / 2 - ((bot.y - position.y) * scale) + (rotation.pitch * height);
       const botTop = botBottom - botHeight * scale;
       const botScreenWidth = botWidth * scale;
@@ -370,14 +412,18 @@ const Index = () => {
       const fog = Math.max(0, 1 - distance / renderDistance);
 
       ctx.fillStyle = `rgba(100, 150, 255, ${fog})`;
-      ctx.fillRect(screenX - botScreenWidth / 2, botTop, botScreenWidth, botHeight * scale);
+      ctx.fillRect(screenX - botScreenWidth / 2, botTop + botHeight * scale * 0.25, botScreenWidth, botHeight * scale * 0.5);
 
       ctx.strokeStyle = `rgba(0, 0, 0, ${fog})`;
       ctx.lineWidth = 2;
-      ctx.strokeRect(screenX - botScreenWidth / 2, botTop, botScreenWidth, botHeight * scale);
+      ctx.strokeRect(screenX - botScreenWidth / 2, botTop + botHeight * scale * 0.25, botScreenWidth, botHeight * scale * 0.5);
 
       ctx.fillStyle = `rgba(255, 220, 177, ${fog})`;
       ctx.fillRect(screenX - botScreenWidth / 2, botTop, botScreenWidth, botHeight * scale * 0.25);
+
+      ctx.fillStyle = `rgba(50, 100, 200, ${fog})`;
+      ctx.fillRect(screenX - botScreenWidth / 2, botTop + botHeight * scale * 0.75, botScreenWidth * 0.45, botHeight * scale * 0.25);
+      ctx.fillRect(screenX + botScreenWidth * 0.05, botTop + botHeight * scale * 0.75, botScreenWidth * 0.45, botHeight * scale * 0.25);
 
       if (cheats.esp) {
         ctx.strokeStyle = `rgba(255, 0, 0, ${fog})`;
@@ -387,6 +433,43 @@ const Index = () => {
         ctx.fillStyle = `rgba(255, 255, 255, ${fog})`;
         ctx.font = '14px monospace';
         ctx.fillText(`${bot.name} [${distance.toFixed(1)}m]`, screenX - 30, botTop - 10);
+      }
+    }
+
+    for (const chest of chests) {
+      const dx = chest.x - position.x;
+      const dz = chest.z - position.z;
+      const distance = Math.sqrt(dx * dx + dz * dz);
+      if (distance > renderDistance) continue;
+
+      const relX = dx * Math.cos(-rotation.yaw) - dz * Math.sin(-rotation.yaw);
+      const relZ = dx * Math.sin(-rotation.yaw) + dz * Math.cos(-rotation.yaw);
+
+      if (relZ < 0.1) continue;
+
+      const scale = (width / 2) / Math.tan(fov / 2) / relZ;
+      const screenX = width / 2 + relX * scale;
+      const chestSize = 0.8;
+      const chestBottom = height / 2 - ((0 - position.y) * scale) + (rotation.pitch * height);
+      const chestTop = chestBottom - chestSize * scale;
+      const chestWidth = chestSize * scale;
+
+      const fog = Math.max(0, 1 - distance / renderDistance);
+
+      ctx.fillStyle = `rgba(139, 90, 43, ${fog})`;
+      ctx.fillRect(screenX - chestWidth / 2, chestTop, chestWidth, chestSize * scale);
+
+      ctx.strokeStyle = `rgba(0, 0, 0, ${fog})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(screenX - chestWidth / 2, chestTop, chestWidth, chestSize * scale);
+
+      ctx.fillStyle = `rgba(200, 200, 200, ${fog})`;
+      ctx.fillRect(screenX - chestWidth * 0.3, chestTop + chestSize * scale * 0.4, chestWidth * 0.6, chestSize * scale * 0.1);
+
+      if (distance < 2) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${fog})`;
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('Нажми E', screenX - 30, chestTop - 10);
       }
     }
 
@@ -600,6 +683,62 @@ const Index = () => {
           >
             Нажми для управления мышкой
           </Button>
+        </div>
+      )}
+
+      {showInventory && nearChest && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 animate-scale-in">
+          <Card className="bg-black/90 border-yellow-600 backdrop-blur-md p-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-700 pb-3">
+                <h3 className="text-2xl font-bold text-yellow-500">СУНДУК С РЕСУРСАМИ</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowInventory(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <Icon name="X" />
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {nearChest.items.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-yellow-900/30 to-transparent hover:from-yellow-800/40 transition-all cursor-pointer"
+                    onClick={() => {
+                      setInventory(prev => ({
+                        ...prev,
+                        [item]: (prev[item] || 0) + 1
+                      }));
+                    }}
+                  >
+                    <span className="text-white font-semibold">{item}</span>
+                    <Button size="sm" variant="outline" className="text-green-500 border-green-500">
+                      Взять
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-3 border-t border-gray-700">
+                <h4 className="text-white font-bold mb-2">Твой инвентарь:</h4>
+                <div className="space-y-1">
+                  {Object.entries(inventory).length === 0 ? (
+                    <p className="text-gray-500 text-sm">Пусто</p>
+                  ) : (
+                    Object.entries(inventory).map(([item, count]) => (
+                      <div key={item} className="text-white text-sm flex justify-between">
+                        <span>{item}</span>
+                        <span className="text-green-400">x{count}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
 
