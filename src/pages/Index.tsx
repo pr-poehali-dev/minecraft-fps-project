@@ -56,22 +56,28 @@ const Index = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      keysPressed.current.add(e.key.toLowerCase());
+      if (gameState !== 'playing') return;
 
-      if (e.key.toLowerCase() === 'q' && gameState === 'playing') {
+      if (e.key.toLowerCase() === 'q') {
         e.preventDefault();
+        e.stopPropagation();
         setCheatMenuOpen((prev) => !prev);
+        return;
       }
 
-      if (e.key === 'Shift') {
-        setIsRunning(true);
-      }
+      if (!cheatMenuOpen) {
+        keysPressed.current.add(e.key.toLowerCase());
 
-      if (e.key === ' ' && gameState === 'playing') {
-        e.preventDefault();
-        if (!isJumping) {
-          setIsJumping(true);
-          setVelocity((v) => ({ ...v, y: 0.15 }));
+        if (e.key === 'Shift') {
+          setIsRunning(true);
+        }
+
+        if (e.key === ' ') {
+          e.preventDefault();
+          if (!isJumping) {
+            setIsJumping(true);
+            setVelocity((v) => ({ ...v, y: 0.15 }));
+          }
         }
       }
     };
@@ -92,12 +98,12 @@ const Index = () => {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('mousemove', handleMouseMove);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('mousemove', handleMouseMove);
     };
