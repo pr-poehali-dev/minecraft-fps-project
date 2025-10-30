@@ -56,10 +56,19 @@ const Index = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
   const [bots, setBots] = useState<Bot[]>([]);
+  const [joystickActive, setJoystickActive] = useState(false);
+  const [joystickPos, setJoystickPos] = useState({ x: 0, y: 0 });
+  const [lookJoystickActive, setLookJoystickActive] = useState(false);
+  const [lookJoystickPos, setLookJoystickPos] = useState({ x: 0, y: 0 });
+  const [isPointerLocked, setIsPointerLocked] = useState(false);
 
   const keysPressed = useRef<Set<string>>(new Set());
   const gameLoopRef = useRef<number>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const moveJoystickRef = useRef<HTMLDivElement>(null);
+  const lookJoystickRef = useRef<HTMLDivElement>(null);
+  const joystickStartPos = useRef({ x: 0, y: 0 });
+  const lookJoystickStartPos = useRef({ x: 0, y: 0 });
 
   const servers = [
     { name: 'FunTime', players: '1,234', status: 'online' },
@@ -156,13 +165,19 @@ const Index = () => {
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (gameState === 'playing' && !cheatMenuOpen) {
+      if (gameState === 'playing' && !cheatMenuOpen && isPointerLocked) {
         setRotation((prev) => ({
           yaw: prev.yaw + e.movementX * 0.002,
           pitch: Math.max(-Math.PI / 2, Math.min(Math.PI / 2, prev.pitch - e.movementY * 0.002)),
         }));
       }
     };
+
+    const handlePointerLockChange = () => {
+      setIsPointerLocked(document.pointerLockElement === canvasRef.current);
+    };
+
+    document.addEventListener('pointerlockchange', handlePointerLockChange);
 
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp);
@@ -172,6 +187,7 @@ const Index = () => {
       window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('pointerlockchange', handlePointerLockChange);
     };
   }, [gameState, cheatMenuOpen, isJumping]);
 
@@ -187,21 +203,41 @@ const Index = () => {
       let dz = 0;
       let dy = 0;
 
+      let moveX = 0;
+      let moveZ = 0;
+
       if (keysPressed.current.has('w')) {
-        dx -= Math.sin(rotation.yaw) * speed * speedMultiplier;
-        dz -= Math.cos(rotation.yaw) * speed * speedMultiplier;
+        moveZ -= 1;
       }
       if (keysPressed.current.has('s')) {
-        dx += Math.sin(rotation.yaw) * speed * speedMultiplier;
-        dz += Math.cos(rotation.yaw) * speed * speedMultiplier;
+        moveZ += 1;
       }
       if (keysPressed.current.has('a')) {
-        dx -= Math.cos(rotation.yaw) * speed * speedMultiplier;
-        dz += Math.sin(rotation.yaw) * speed * speedMultiplier;
+        moveX -= 1;
       }
       if (keysPressed.current.has('d')) {
-        dx += Math.cos(rotation.yaw) * speed * speedMultiplier;
-        dz -= Math.sin(rotation.yaw) * speed * speedMultiplier;
+        moveX += 1;
+      }
+
+      if (joystickActive) {
+        moveX += joystickPos.x;
+        moveZ += joystickPos.y;
+      }
+
+      const moveLength = Math.sqrt(moveX * moveX + moveZ * moveZ);
+      if (moveLength > 0) {
+        moveX /= moveLength;
+        moveZ /= moveLength;
+      }
+
+      dx = (moveX * Math.cos(rotation.yaw) - moveZ * Math.sin(rotation.yaw)) * speed * speedMultiplier;
+      dz = (moveX * Math.sin(rotation.yaw) + moveZ * Math.cos(rotation.yaw)) * speed * speedMultiplier;
+
+      if (lookJoystickActive) {
+        setRotation((prev) => ({
+          yaw: prev.yaw + lookJoystickPos.x * 0.05,
+          pitch: Math.max(-Math.PI / 2, Math.min(Math.PI / 2, prev.pitch - lookJoystickPos.y * 0.05)),
+        }));
       }
 
       if (cheats.fly) {
@@ -464,6 +500,108 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      <div className="absolute bottom-8 left-8 w-32 h-32 touch-none">
+        <div
+          ref={moveJoystickRef}
+          className="relative w-full h-full bg-black/40 rounded-full border-2 border-white/30 backdrop-blur-sm"
+          onTouchStart={(e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = moveJoystickRef.current?.getBoundingClientRect();
+            if (rect) {
+              joystickStartPos.current = { x: touch.clientX, y: touch.clientY };
+              setJoystickActive(true);
+            }
+          }}
+          onTouchMove={(e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = moveJoystickRef.current?.getBoundingClientRect();
+            if (rect) {
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              const deltaX = touch.clientX - centerX;
+              const deltaY = touch.clientY - centerY;
+              const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+              const maxDistance = rect.width / 2;
+              const clampedDistance = Math.min(distance, maxDistance);
+              const angle = Math.atan2(deltaY, deltaX);
+              setJoystickPos({
+                x: (Math.cos(angle) * clampedDistance) / maxDistance,
+                y: (Math.sin(angle) * clampedDistance) / maxDistance,
+              });
+            }
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            setJoystickActive(false);
+            setJoystickPos({ x: 0, y: 0 });
+          }}
+        >
+          <div
+            className="absolute w-12 h-12 bg-white/60 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-transform"
+            style={{
+              transform: `translate(calc(-50% + ${joystickPos.x * 40}px), calc(-50% + ${joystickPos.y * 40}px))`,
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="absolute bottom-8 right-48 w-32 h-32 touch-none">
+        <div
+          ref={lookJoystickRef}
+          className="relative w-full h-full bg-black/40 rounded-full border-2 border-white/30 backdrop-blur-sm"
+          onTouchStart={(e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            lookJoystickStartPos.current = { x: touch.clientX, y: touch.clientY };
+            setLookJoystickActive(true);
+          }}
+          onTouchMove={(e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = lookJoystickRef.current?.getBoundingClientRect();
+            if (rect) {
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              const deltaX = touch.clientX - centerX;
+              const deltaY = touch.clientY - centerY;
+              const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+              const maxDistance = rect.width / 2;
+              const clampedDistance = Math.min(distance, maxDistance);
+              const angle = Math.atan2(deltaY, deltaX);
+              setLookJoystickPos({
+                x: (Math.cos(angle) * clampedDistance) / maxDistance,
+                y: (Math.sin(angle) * clampedDistance) / maxDistance,
+              });
+            }
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            setLookJoystickActive(false);
+            setLookJoystickPos({ x: 0, y: 0 });
+          }}
+        >
+          <div
+            className="absolute w-12 h-12 bg-white/60 rounded-full top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-transform"
+            style={{
+              transform: `translate(calc(-50% + ${lookJoystickPos.x * 40}px), calc(-50% + ${lookJoystickPos.y * 40}px))`,
+            }}
+          />
+        </div>
+      </div>
+
+      {!isPointerLocked && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <Button
+            onClick={() => canvasRef.current?.requestPointerLock()}
+            className="bg-[#ea384c] hover:bg-[#c02f3d] text-white text-xl px-8 py-6"
+          >
+            Нажми для управления мышкой
+          </Button>
+        </div>
+      )}
 
       {cheatMenuOpen && (
         <div className="absolute top-20 left-4 w-80 animate-scale-in">
