@@ -188,7 +188,7 @@ const Index = () => {
     ctx.fillStyle = '#8B7355';
     ctx.fillRect(0, height / 2, width, height / 2);
 
-    const blockSize = 60;
+    const blockSize = 100;
     const gridSize = 30;
     const eyeHeight = 1.62;
 
