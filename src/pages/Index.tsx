@@ -26,6 +26,17 @@ interface CheatSettings {
   xray: boolean;
 }
 
+interface Bot {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  targetX: number;
+  targetZ: number;
+  name: string;
+}
+
 const Index = () => {
   const [gameState, setGameState] = useState<GameState>('menu');
   const [selectedServer, setSelectedServer] = useState<string>('');
@@ -39,11 +50,12 @@ const Index = () => {
     xray: false,
   });
 
-  const [position, setPosition] = useState<Position>({ x: 0, y: 0, z: 0 });
+  const [position, setPosition] = useState<Position>({ x: 0, y: 1.62, z: 0 });
   const [rotation, setRotation] = useState<Rotation>({ yaw: 0, pitch: 0 });
   const [velocity, setVelocity] = useState({ x: 0, y: 0, z: 0 });
   const [isRunning, setIsRunning] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
+  const [bots, setBots] = useState<Bot[]>([]);
 
   const keysPressed = useRef<Set<string>>(new Set());
   const gameLoopRef = useRef<number>();
@@ -53,6 +65,65 @@ const Index = () => {
     { name: 'FunTime', players: '1,234', status: 'online' },
     { name: 'HolyWorld', players: '856', status: 'online' },
   ];
+
+  const botNames = ['Steve', 'Alex', 'Herobrine', 'Notch', 'Player123', 'ProGamer', 'Miner42'];
+
+  useEffect(() => {
+    if (gameState === 'playing' && bots.length === 0) {
+      const initialBots: Bot[] = [];
+      for (let i = 0; i < 5; i++) {
+        const x = Math.random() * 20 - 10;
+        const z = Math.random() * 20 - 10;
+        initialBots.push({
+          id: i,
+          x,
+          y: 1.62,
+          z,
+          yaw: Math.random() * Math.PI * 2,
+          targetX: x,
+          targetZ: z,
+          name: botNames[i % botNames.length],
+        });
+      }
+      setBots(initialBots);
+    }
+  }, [gameState]);
+
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    const botInterval = setInterval(() => {
+      setBots((prevBots) =>
+        prevBots.map((bot) => {
+          const dx = bot.targetX - bot.x;
+          const dz = bot.targetZ - bot.z;
+          const distance = Math.sqrt(dx * dx + dz * dz);
+
+          if (distance < 0.5) {
+            return {
+              ...bot,
+              targetX: bot.x + (Math.random() - 0.5) * 10,
+              targetZ: bot.z + (Math.random() - 0.5) * 10,
+            };
+          }
+
+          const speed = 0.03;
+          const newX = bot.x + (dx / distance) * speed;
+          const newZ = bot.z + (dz / distance) * speed;
+          const newYaw = Math.atan2(dx, dz);
+
+          return {
+            ...bot,
+            x: newX,
+            z: newZ,
+            yaw: newYaw,
+          };
+        })
+      );
+    }, 50);
+
+    return () => clearInterval(botInterval);
+  }, [gameState]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -117,20 +188,20 @@ const Index = () => {
       let dy = 0;
 
       if (keysPressed.current.has('w')) {
-        dx += Math.sin(rotation.yaw) * speed * speedMultiplier;
-        dz += Math.cos(rotation.yaw) * speed * speedMultiplier;
-      }
-      if (keysPressed.current.has('s')) {
         dx -= Math.sin(rotation.yaw) * speed * speedMultiplier;
         dz -= Math.cos(rotation.yaw) * speed * speedMultiplier;
       }
-      if (keysPressed.current.has('a')) {
-        dx += Math.cos(rotation.yaw) * speed * speedMultiplier;
-        dz -= Math.sin(rotation.yaw) * speed * speedMultiplier;
+      if (keysPressed.current.has('s')) {
+        dx += Math.sin(rotation.yaw) * speed * speedMultiplier;
+        dz += Math.cos(rotation.yaw) * speed * speedMultiplier;
       }
-      if (keysPressed.current.has('d')) {
+      if (keysPressed.current.has('a')) {
         dx -= Math.cos(rotation.yaw) * speed * speedMultiplier;
         dz += Math.sin(rotation.yaw) * speed * speedMultiplier;
+      }
+      if (keysPressed.current.has('d')) {
+        dx += Math.cos(rotation.yaw) * speed * speedMultiplier;
+        dz -= Math.sin(rotation.yaw) * speed * speedMultiplier;
       }
 
       if (cheats.fly) {
@@ -139,7 +210,7 @@ const Index = () => {
       } else {
         setVelocity((v) => {
           let newY = v.y - 0.008;
-          if (position.y <= 0 && newY < 0) {
+          if (position.y <= 1.62 && newY < 0) {
             newY = 0;
             setIsJumping(false);
           }
@@ -150,7 +221,7 @@ const Index = () => {
 
       setPosition((prev) => ({
         x: prev.x + dx,
-        y: Math.max(0, prev.y + dy),
+        y: Math.max(1.62, prev.y + dy),
         z: prev.z + dz,
       }));
 
@@ -183,54 +254,103 @@ const Index = () => {
     ctx.fillStyle = '#8B7355';
     ctx.fillRect(0, height / 2, width, height / 2);
 
-    const blockSize = 150;
-    const gridSize = 30;
-    const eyeHeight = 1.62;
+    const blockSize = 1;
+    const gridSize = 20;
+    const fov = 70 * (Math.PI / 180);
+    const renderDistance = 20;
 
+    const renderBlocks = [];
     for (let x = -gridSize; x < gridSize; x++) {
       for (let z = -gridSize; z < gridSize; z++) {
         const worldX = x - position.x;
         const worldZ = z - position.z;
-
         const distance = Math.sqrt(worldX * worldX + worldZ * worldZ);
-        if (distance > 15) continue;
+        if (distance > renderDistance) continue;
+        renderBlocks.push({ x: worldX, z: worldZ, distance });
+      }
+    }
+    renderBlocks.sort((a, b) => b.distance - a.distance);
 
-        const rotatedX = worldX * Math.cos(rotation.yaw) + worldZ * Math.sin(rotation.yaw);
-        const rotatedZ = -worldX * Math.sin(rotation.yaw) + worldZ * Math.cos(rotation.yaw);
+    for (const block of renderBlocks) {
+      const dx = block.x;
+      const dz = block.z;
 
-        if (rotatedZ <= 0.1) continue;
+      const relX = dx * Math.cos(-rotation.yaw) - dz * Math.sin(-rotation.yaw);
+      const relZ = dx * Math.sin(-rotation.yaw) + dz * Math.cos(-rotation.yaw);
 
-        const screenX = width / 2 + (rotatedX / rotatedZ) * width * 0.8;
-        const blockWorldY = 0 - (position.y + eyeHeight);
-        const screenY = height / 2 - (blockWorldY / rotatedZ) * height * 0.8 + (rotation.pitch * height * 0.3);
+      if (relZ < 0.1) continue;
 
-        const blockScreenSize = blockSize / rotatedZ;
+      const scale = (width / 2) / Math.tan(fov / 2) / relZ;
+      const screenX = width / 2 + relX * scale;
+      const blockBottom = height / 2 - ((0 - position.y) * scale) + (rotation.pitch * height);
+      const blockTop = blockBottom - blockSize * scale;
+      const blockWidth = blockSize * scale;
 
-        if (screenX > -blockScreenSize && screenX < width + blockScreenSize && 
-            screenY > -blockScreenSize && screenY < height + blockScreenSize) {
-          
-          const fog = Math.max(0, Math.min(1, 1 - distance / 15));
-          const brightness = 180 * fog;
-          
-          const grassTop = `rgb(${brightness * 0.4}, ${brightness * 0.7}, ${brightness * 0.3})`;
-          const grassSide = `rgb(${brightness * 0.35}, ${brightness * 0.5}, ${brightness * 0.25})`;
-          
-          ctx.fillStyle = grassTop;
-          ctx.fillRect(screenX, screenY, blockScreenSize, blockScreenSize);
+      if (screenX + blockWidth < 0 || screenX > width) continue;
+      if (blockTop > height || blockBottom < 0) continue;
 
-          ctx.fillStyle = grassSide;
-          ctx.fillRect(screenX, screenY + blockScreenSize * 0.1, blockScreenSize, blockScreenSize * 0.3);
+      const fog = Math.max(0, 1 - block.distance / renderDistance);
+      const brightness = fog;
 
-          ctx.strokeStyle = `rgba(0, 0, 0, ${0.3 * fog})`;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(screenX, screenY, blockScreenSize, blockScreenSize);
+      const grassTop = [106 * brightness, 190 * brightness, 48 * brightness];
+      const grassSide = [89 * brightness, 152 * brightness, 39 * brightness];
+      const dirtColor = [134 * brightness, 96 * brightness, 67 * brightness];
 
-          if (cheats.xray && (x + z) % 3 === 0) {
-            ctx.fillStyle = `rgba(64, 224, 208, ${0.7 * fog})`;
-            ctx.fillRect(screenX + blockScreenSize * 0.25, screenY + blockScreenSize * 0.25, 
-                        blockScreenSize * 0.5, blockScreenSize * 0.5);
-          }
-        }
+      ctx.fillStyle = `rgb(${grassTop[0]}, ${grassTop[1]}, ${grassTop[2]})`;
+      ctx.fillRect(screenX, blockTop, blockWidth, (blockBottom - blockTop) * 0.2);
+
+      ctx.fillStyle = `rgb(${grassSide[0]}, ${grassSide[1]}, ${grassSide[2]})`;
+      ctx.fillRect(screenX, blockTop + (blockBottom - blockTop) * 0.2, blockWidth, (blockBottom - blockTop) * 0.8);
+
+      ctx.strokeStyle = `rgba(0, 0, 0, ${0.3 * fog})`;
+      ctx.lineWidth = Math.max(1, scale * 0.05);
+      ctx.strokeRect(screenX, blockTop, blockWidth, blockBottom - blockTop);
+
+      if (cheats.xray && ((Math.floor(block.x + position.x) + Math.floor(block.z + position.z)) % 3 === 0)) {
+        ctx.fillStyle = `rgba(64, 224, 208, ${0.6 * fog})`;
+        ctx.fillRect(screenX + blockWidth * 0.2, blockTop + (blockBottom - blockTop) * 0.4, blockWidth * 0.6, (blockBottom - blockTop) * 0.4);
+      }
+    }
+
+    for (const bot of bots) {
+      const dx = bot.x - position.x;
+      const dz = bot.z - position.z;
+      const distance = Math.sqrt(dx * dx + dz * dz);
+      if (distance > renderDistance) continue;
+
+      const relX = dx * Math.cos(-rotation.yaw) - dz * Math.sin(-rotation.yaw);
+      const relZ = dx * Math.sin(-rotation.yaw) + dz * Math.cos(-rotation.yaw);
+
+      if (relZ < 0.1) continue;
+
+      const scale = (width / 2) / Math.tan(fov / 2) / relZ;
+      const screenX = width / 2 + relX * scale;
+      const botHeight = 1.8;
+      const botWidth = 0.6;
+      const botBottom = height / 2 - ((bot.y - position.y) * scale) + (rotation.pitch * height);
+      const botTop = botBottom - botHeight * scale;
+      const botScreenWidth = botWidth * scale;
+
+      const fog = Math.max(0, 1 - distance / renderDistance);
+
+      ctx.fillStyle = `rgba(100, 150, 255, ${fog})`;
+      ctx.fillRect(screenX - botScreenWidth / 2, botTop, botScreenWidth, botHeight * scale);
+
+      ctx.strokeStyle = `rgba(0, 0, 0, ${fog})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(screenX - botScreenWidth / 2, botTop, botScreenWidth, botHeight * scale);
+
+      ctx.fillStyle = `rgba(255, 220, 177, ${fog})`;
+      ctx.fillRect(screenX - botScreenWidth / 2, botTop, botScreenWidth, botHeight * scale * 0.25);
+
+      if (cheats.esp) {
+        ctx.strokeStyle = `rgba(255, 0, 0, ${fog})`;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(screenX - botScreenWidth / 2 - 5, botTop - 5, botScreenWidth + 10, botHeight * scale + 10);
+        
+        ctx.fillStyle = `rgba(255, 255, 255, ${fog})`;
+        ctx.font = '14px monospace';
+        ctx.fillText(`${bot.name} [${distance.toFixed(1)}m]`, screenX - 30, botTop - 10);
       }
     }
 
