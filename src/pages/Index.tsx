@@ -58,12 +58,7 @@ const Index = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (gameState !== 'playing') return;
 
-      if (e.key.toLowerCase() === 'q') {
-        e.preventDefault();
-        e.stopPropagation();
-        setCheatMenuOpen((prev) => !prev);
-        return;
-      }
+
 
       if (!cheatMenuOpen) {
         keysPressed.current.add(e.key.toLowerCase());
@@ -188,7 +183,7 @@ const Index = () => {
     ctx.fillStyle = '#8B7355';
     ctx.fillRect(0, height / 2, width, height / 2);
 
-    const blockSize = 100;
+    const blockSize = 150;
     const gridSize = 30;
     const eyeHeight = 1.62;
 
@@ -298,7 +293,7 @@ const Index = () => {
           </Card>
 
           <div className="text-center space-y-2">
-            <p className="text-gray-500 text-sm">Управление: WASD - движение | Shift - бег | Space - прыжок | Q - читы</p>
+            <p className="text-gray-500 text-sm">Управление: WASD - движение | Shift - бег | Space - прыжок | Вкладка SLIDE - читы</p>
             <p className="text-gray-600 text-xs">Made with ❤️ by SlideClient Team</p>
           </div>
         </div>
@@ -325,10 +320,20 @@ const Index = () => {
         style={{ imageRendering: 'pixelated' }}
       />
 
-      <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-700">
-        <p className="text-white text-sm font-mono">
-          {selectedServer} | XYZ: {position.x.toFixed(1)}, {position.y.toFixed(1)}, {position.z.toFixed(1)}
-        </p>
+      <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+        <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-700">
+          <button
+            onClick={() => setCheatMenuOpen(!cheatMenuOpen)}
+            className="text-[#ea384c] text-lg font-bold hover:text-white transition-colors"
+          >
+            SLIDE
+          </button>
+        </div>
+        <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-700">
+          <p className="text-white text-sm font-mono">
+            {selectedServer} | XYZ: {position.x.toFixed(1)}, {position.y.toFixed(1)}, {position.z.toFixed(1)}
+          </p>
+        </div>
       </div>
 
       <div className="absolute bottom-8 right-8 pointer-events-none">
@@ -341,7 +346,7 @@ const Index = () => {
       </div>
 
       {cheatMenuOpen && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 animate-scale-in">
+        <div className="absolute top-20 left-4 w-80 animate-scale-in">
           <Card className="bg-black/90 border-[#ea384c] backdrop-blur-md p-6">
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-gray-700 pb-3">
@@ -384,11 +389,7 @@ const Index = () => {
         </div>
       )}
 
-      {!cheatMenuOpen && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm bg-black/60 px-4 py-2 rounded-lg backdrop-blur-sm">
-          Нажми Q для открытия читов
-        </div>
-      )}
+
     </div>
   );
 };
